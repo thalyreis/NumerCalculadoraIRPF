@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { auth, db } from "../firebase";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { doc, getDoc, collection, getDocs, limit, query } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, limit, query, where } from "firebase/firestore";
 import { Calculator, Lock, Mail, UserPlus, LogIn } from "lucide-react";
 import logo from "../assets/logo.png";
 
@@ -10,21 +10,6 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [hasUsers, setHasUsers] = useState(true);
-
-  useEffect(() => {
-    const checkUsers = async () => {
-      try {
-        const q = query(collection(db, "users"), limit(1));
-        const snap = await getDocs(q);
-        setHasUsers(!snap.empty);
-      } catch (e) {
-        setHasUsers(false); 
-      }
-    };
-    checkUsers();
-  }, []);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -33,7 +18,11 @@ export default function Login() {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
     } catch (err: any) {
-      setError("Erro no login com Google: " + err.message);
+      if (err.code === "auth/operation-not-allowed") {
+        setError("O login com Google não está ativado no Console do Firebase. Ative-o em Authentication > Sign-in method.");
+      } else {
+        setError("Erro no login com Google: " + err.message);
+      }
       console.error(err);
     } finally {
       setLoading(false);
@@ -45,22 +34,14 @@ export default function Login() {
     setLoading(true);
     setError("");
     try {
-      if (isRegistering) {
-        await createUserWithEmailAndPassword(auth, email, password);
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
+      await signInWithEmailAndPassword(auth, email, password);
     } catch (err: any) {
       if (err.code === "auth/operation-not-allowed") {
         setError("O login por E-mail/Senha não está ativado no Console do Firebase. Ative-o em Authentication > Sign-in method.");
       } else if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
-        setError("Email ou senha incorretos. Verifique suas credenciais ou use o login com Google.");
+        setError("Credenciais inválidas. Verifique seu e-mail e senha.");
       } else if (err.code === "auth/wrong-password") {
         setError("Senha incorreta.");
-      } else if (err.code === "auth/email-already-in-use") {
-        setError("Este email já está em uso.");
-      } else if (err.code === "auth/weak-password") {
-        setError("A senha deve ter pelo menos 6 caracteres.");
       } else {
         setError("Erro na autenticação: " + err.message);
       }
@@ -91,7 +72,7 @@ export default function Login() {
           Numer<span className="text-gray-900"> Contabilidade e Sistemas</span>
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
-          {isRegistering ? "Crie sua conta de administrador" : "Acesse o sistema administrativo"}
+          Acesse o sistema administrativo
         </p>
       </div>
 
@@ -157,7 +138,7 @@ export default function Login() {
                 {loading ? (
                   <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
                 ) : (
-                  isRegistering ? "Cadastrar Administrador" : "Entrar no Sistema"
+                  "Entrar no Sistema"
                 )}
               </button>
             </div>
@@ -185,38 +166,6 @@ export default function Login() {
                 Entrar com Google
               </button>
             </div>
-          </div>
-
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">
-                  {!hasUsers ? "Primeiro Acesso?" : "Acesso Administrativo"}
-                </span>
-              </div>
-            </div>
-            
-            {!hasUsers && !isRegistering && (
-              <button
-                onClick={() => setIsRegistering(true)}
-                className="mt-4 w-full flex justify-center items-center gap-2 py-2 px-4 border border-orange-500 rounded-md text-sm font-medium text-orange-600 hover:bg-orange-50 transition-all"
-              >
-                <UserPlus className="w-4 h-4" />
-                Configurar Primeiro Admin
-              </button>
-            )}
-
-            {isRegistering && (
-              <button
-                onClick={() => setIsRegistering(false)}
-                className="mt-4 w-full text-center text-sm text-gray-500 hover:text-orange-600"
-              >
-                Voltar para o Login
-              </button>
-            )}
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../firebase";
 import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
-import { Save, RefreshCw, DollarSign, Settings as SettingsIcon, CheckCircle2, AlertCircle } from "lucide-react";
+import { Save, RefreshCw, DollarSign, Settings as SettingsIcon, CheckCircle2, AlertCircle, Plus, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { SECTIONS as DEFAULT_SECTIONS, BASE_VALUE as DEFAULT_BASE_VALUE } from "../constants";
 import { cn } from "../lib/utils";
@@ -80,6 +80,15 @@ export default function Settings() {
     }));
   };
 
+  const addDiscount = () => {
+    const newId = `DISCOUNT_${Date.now()}`;
+    setDiscounts(prev => [...prev, { id: newId, name: "Novo Desconto", value: 0 }]);
+  };
+
+  const removeDiscount = (id: string) => {
+    setDiscounts(prev => prev.filter(d => d.id !== id));
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center py-12">
@@ -128,33 +137,53 @@ export default function Settings() {
           </div>
 
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-4">
-            <h3 className="text-lg font-bold text-gray-900 border-b pb-2">Configurações de Descontos</h3>
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="text-lg font-bold text-gray-900">Configurações de Descontos</h3>
+              <button
+                onClick={addDiscount}
+                className="flex items-center gap-1 text-xs font-bold bg-orange-100 text-orange-600 px-3 py-1.5 rounded-lg hover:bg-orange-200 transition-all"
+              >
+                <Plus className="w-3 h-3" />
+                Adicionar
+              </button>
+            </div>
             <div className="space-y-6">
-              {discounts.map((discount) => (
-                <div key={discount.id} className="space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Nome do Desconto</label>
-                    <input
-                      type="text"
-                      value={discount.name}
-                      onChange={(e) => handleDiscountChange(discount.id, "name", e.target.value)}
-                      className="w-full px-3 py-1.5 border border-gray-200 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all text-sm font-bold text-gray-700"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Porcentagem (%)</label>
-                    <div className="relative">
+              {discounts.length === 0 ? (
+                <p className="text-center py-4 text-gray-400 text-sm italic">Nenhum desconto configurado.</p>
+              ) : (
+                discounts.map((discount) => (
+                  <div key={discount.id} className="relative space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-100 group">
+                    <button
+                      onClick={() => removeDiscount(discount.id)}
+                      className="absolute -top-2 -right-2 bg-red-100 text-red-600 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-red-200 shadow-sm"
+                      title="Excluir Desconto"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Nome do Desconto</label>
                       <input
-                        type="number"
-                        value={discount.value}
-                        onChange={(e) => handleDiscountChange(discount.id, "value", e.target.value)}
-                        className="w-full pl-3 pr-8 py-1.5 border border-gray-200 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all text-sm font-bold text-gray-700"
+                        type="text"
+                        value={discount.name}
+                        onChange={(e) => handleDiscountChange(discount.id, "name", e.target.value)}
+                        className="w-full px-3 py-1.5 border border-gray-200 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all text-sm font-bold text-gray-700"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">%</span>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Porcentagem (%)</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={discount.value}
+                          onChange={(e) => handleDiscountChange(discount.id, "value", e.target.value)}
+                          className="w-full pl-3 pr-8 py-1.5 border border-gray-200 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all text-sm font-bold text-gray-700"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">%</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
             <p className="text-[10px] text-gray-400 italic">* Estes descontos são aplicados sobre o subtotal do orçamento.</p>
           </div>

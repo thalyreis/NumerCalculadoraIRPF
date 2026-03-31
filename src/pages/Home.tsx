@@ -1,13 +1,15 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { db, auth } from "../firebase";
 import { collection, addDoc, serverTimestamp, doc, updateDoc, onSnapshot } from "firebase/firestore";
 import { 
   Plus, Minus, Save, FileText, CheckCircle2, AlertCircle, Calculator, X, 
   Building2, User, Globe, Briefcase, ShieldCheck, Star, Receipt, 
-  Stethoscope, Heart, Vote, Users, Baby, Home as HomeIcon, CreditCard, FileUp
+  Stethoscope, Heart, Vote, Users, Baby, Home as HomeIcon, CreditCard, FileUp,
+  Key, Lock
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import { cn } from "../lib/utils";
 import { SECTIONS, BASE_VALUE } from "../constants";
 import { generatePDF } from "../lib/pdf-utils";
@@ -30,6 +32,48 @@ export default function Home({ isAdmin }: { isAdmin: boolean }) {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+
+  // Password Change States
+  const [showPassModal, setShowPassModal] = useState(false);
+  const [currentPass, setCurrentPass] = useState("");
+  const [newPass, setNewPass] = useState("");
+  const [passError, setPassError] = useState("");
+  const [passSuccess, setPassSuccess] = useState(false);
+  const [passLoading, setPassLoading] = useState(false);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth.currentUser || !auth.currentUser.email) return;
+    
+    setPassLoading(true);
+    setPassError("");
+    setPassSuccess(false);
+
+    try {
+      // Re-authenticate first (required by Firebase for sensitive operations)
+      const credential = EmailAuthProvider.credential(auth.currentUser.email, currentPass);
+      await reauthenticateWithCredential(auth.currentUser, credential);
+      
+      // Update password
+      await updatePassword(auth.currentUser, newPass);
+      
+      setPassSuccess(true);
+      setCurrentPass("");
+      setNewPass("");
+      setTimeout(() => setShowPassModal(false), 2000);
+    } catch (err: any) {
+      console.error(err);
+      if (err.code === "auth/wrong-password") {
+        setPassError("A senha atual está incorreta.");
+      } else if (err.code === "auth/weak-password") {
+        setPassError("A nova senha deve ter pelo menos 6 caracteres.");
+      } else {
+        setPassError("Erro ao alterar senha: " + err.message);
+      }
+    } finally {
+      setPassLoading(false);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, "settings", "pricing"), (docSnap) => {
@@ -483,6 +527,99 @@ export default function Home({ isAdmin }: { isAdmin: boolean }) {
           </div>
         </div>
       </div>
+
+      {/* Perfil e Segurança Section */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mt-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gray-100 rounded-lg">
+              <ShieldCheck className="w-5 h-5 text-gray-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Segurança da Conta</h3>
+              <p className="text-sm text-gray-500">Gerencie sua senha e proteja seu acesso</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowPassModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg font-bold text-sm hover:bg-gray-800 transition-all"
+          >
+            <Key className="w-4 h-4" />
+            Alterar Minha Senha
+          </button>
+        </div>
+      </div>
+
+      {/* Password Change Modal */}
+      <AnimatePresence>
+        {showPassModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <Lock className="w-5 h-5 text-orange-500" />
+                  Alterar Senha
+                </h3>
+                <button onClick={() => setShowPassModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <form onSubmit={handleChangePassword} className="p-6 space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Senha Atual</label>
+                  <input
+                    type="password"
+                    value={currentPass}
+                    onChange={(e) => setCurrentPass(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 transition-all"
+                    placeholder="Digite sua senha atual"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Nova Senha</label>
+                  <input
+                    type="password"
+                    value={newPass}
+                    onChange={(e) => setNewPass(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 transition-all"
+                    placeholder="Mínimo 6 caracteres"
+                    required
+                  />
+                </div>
+
+                {passError && (
+                  <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    {passError}
+                  </div>
+                )}
+
+                {passSuccess && (
+                  <div className="p-3 bg-green-50 text-green-700 rounded-lg text-sm flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Senha alterada com sucesso!
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={passLoading}
+                  className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold hover:bg-orange-600 transition-all shadow-lg shadow-orange-100 disabled:opacity-50"
+                >
+                  {passLoading ? "Processando..." : "Confirmar Alteração"}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

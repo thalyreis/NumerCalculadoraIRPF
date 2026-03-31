@@ -39,7 +39,8 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
          (request.auth.token.email == "thalyreis64@gmail.com" && request.auth.token.email_verified == true));
     }
 
@@ -54,7 +55,7 @@ service cloud.firestore {
              data.phone is string && data.phone.size() >= 8 &&
              data.totalValue is number && data.totalValue >= 0 &&
              data.status in ['pending', 'approved'] &&
-             data.discountType in ['none', 'NUMER', 'SINDSEP'] &&
+             data.discountType is string &&
              data.selections is map &&
              (!('createdBy' in data) || data.createdBy == request.auth.uid || isAdmin()) &&
              (!('updatedAt' in data) || data.updatedAt is timestamp) &&
@@ -62,7 +63,7 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin() || resource.data.email == request.auth.token.email);
       allow create: if isAuthenticated() && (isOwner(userId) || isAdmin());
       allow update: if isAdmin();
       allow delete: if isAdmin();

@@ -39,6 +39,14 @@ export default function Budgets({ isAdmin }: { isAdmin?: boolean }) {
   const [proofId, setProofId] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [feedback, setFeedback] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  useEffect(() => {
+    if (feedback) {
+      const timer = setTimeout(() => setFeedback(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [feedback]);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -108,7 +116,7 @@ export default function Budgets({ isAdmin }: { isAdmin?: boolean }) {
       setDeletingId(null);
     } catch (err) {
       console.error("Erro ao excluir:", err);
-      alert("Erro ao excluir orçamento. Verifique sua conexão ou permissões.");
+      setFeedback({ message: "Erro ao excluir orçamento. Verifique sua conexão ou permissões.", type: "error" });
     } finally {
       setIsSaving(false);
     }
@@ -130,9 +138,10 @@ export default function Budgets({ isAdmin }: { isAdmin?: boolean }) {
           });
           setProofId(null);
           setSelectedFile(null);
+          setFeedback({ message: "Comprovante anexado com sucesso!", type: "success" });
         } catch (err) {
           console.error(err);
-          alert("Erro ao salvar no banco de dados.");
+          setFeedback({ message: "Erro ao salvar no banco de dados.", type: "error" });
         } finally {
           setIsSaving(false);
         }
@@ -140,7 +149,7 @@ export default function Budgets({ isAdmin }: { isAdmin?: boolean }) {
       reader.readAsDataURL(selectedFile);
     } catch (err) {
       console.error(err);
-      alert("Erro ao processar arquivo.");
+      setFeedback({ message: "Erro ao processar arquivo.", type: "error" });
       setIsSaving(false);
     }
   };
@@ -405,6 +414,34 @@ export default function Budgets({ isAdmin }: { isAdmin?: boolean }) {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Feedback Toast */}
+      <AnimatePresence>
+        {feedback && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className={cn(
+              "fixed bottom-6 right-6 p-4 rounded-xl shadow-2xl flex items-center gap-3 z-[100] max-w-md",
+              feedback.type === "success" ? "bg-green-600 text-white" : "bg-red-600 text-white"
+            )}
+          >
+            {feedback.type === "success" ? (
+              <CheckCircle2 className="w-5 h-5" />
+            ) : (
+              <AlertCircle className="w-5 h-5" />
+            )}
+            <p className="font-medium">{feedback.message}</p>
+            <button 
+              onClick={() => setFeedback(null)}
+              className="ml-2 hover:bg-white/20 p-1 rounded transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

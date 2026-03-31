@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp, query, collection, where, getDocs, deleteDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
@@ -24,15 +24,36 @@ export default function App() {
         const userSnap = await getDoc(userRef);
         
         if (!userSnap.exists()) {
-          // Create user record
+          // Check if there's a pre-authorized role for this email
+          const usersQuery = query(collection(db, "users"), where("email", "==", currentUser.email));
+          const querySnap = await getDocs(usersQuery);
+          
+          let preAssignedRole: "admin" | "user" = "user";
+          let preAssignedDocId: string | null = null;
+
+          if (!querySnap.empty) {
+            const preDoc = querySnap.docs[0];
+            preAssignedRole = preDoc.data().role || "user";
+            preAssignedDocId = preDoc.id;
+          }
+
+          // Create user record with the actual UID
           const isFirstAdmin = currentUser.email === "thalyreis64@gmail.com" || currentUser.email === "admin@contabilpro.com";
+          const finalRole = isFirstAdmin ? "admin" : preAssignedRole;
+
           await setDoc(userRef, {
             email: currentUser.email,
             uid: currentUser.uid,
-            role: isFirstAdmin ? "admin" : "user",
+            role: finalRole,
             createdAt: serverTimestamp(),
           });
-          setIsAdmin(isFirstAdmin);
+
+          // If there was a pre-assigned doc with a different ID (like a placeholder), delete it
+          if (preAssignedDocId && preAssignedDocId !== currentUser.uid) {
+            await deleteDoc(doc(db, "users", preAssignedDocId));
+          }
+
+          setIsAdmin(finalRole === "admin");
         } else {
           setIsAdmin(userSnap.data().role === "admin");
         }
