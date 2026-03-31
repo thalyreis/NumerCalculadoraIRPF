@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required, email format)
+    //   - role: string (required, enum: ['admin', 'user'])
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: budgets
+    // Document ID: {budgetId}
+    // Fields:
+    //   - clientName: string (required, minLen: 1, maxLen: 100)
+    //   - cpf: string (required, CPF format)
+    //   - phone: string (required, phone format)
+    //   - cnpj: string (optional)
+    //   - selections: map (required)
+    //   - totalValue: number (required, positive)
+    //   - discountType: string (required, enum: ['none', 'NUMER', 'SINDSEP'])
+    //   - status: string (required, enum: ['pending', 'approved'])
+    //   - proofUrl: string (optional)
+    //   - createdBy: string (required, matches auth.uid)
+    //   - createdAt: timestamp (required)
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "thalyreis64@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidBudget(data) {
+      return data.keys().hasAll(['clientName', 'cpf', 'phone', 'totalValue', 'status', 'createdBy', 'createdAt', 'selections', 'discountType']) &&
+             data.clientName is string && data.clientName.size() > 0 && data.clientName.size() <= 100 &&
+             data.cpf is string && data.cpf.size() >= 11 &&
+             data.phone is string && data.phone.size() >= 8 &&
+             data.totalValue is number && data.totalValue >= 0 &&
+             data.status in ['pending', 'approved'] &&
+             data.discountType in ['none', 'NUMER', 'SINDSEP'] &&
+             data.selections is map &&
+             data.createdBy == request.auth.uid &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow create: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /budgets/{budgetId} {
+      allow read: if isAuthenticated() && (resource.data.createdBy == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidBudget(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.createdBy == request.auth.uid || isAdmin()) &&
+                    isValidBudget(request.resource.data);
+      allow delete: if isAuthenticated() && (resource.data.createdBy == request.auth.uid || isAdmin());
+    }
+  }
+}

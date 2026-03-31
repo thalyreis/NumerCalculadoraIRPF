@@ -1,0 +1,45 @@
+{
+  "entities": {
+    "user": {
+      "title": "User Profile",
+      "description": "User profile data including role and preferences.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email", "description": "User email" },
+        "role": { "type": "string", "enum": ["admin", "user"], "description": "User role" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "budget": {
+      "title": "Budget Record",
+      "description": "Calculated budget for a client.",
+      "type": "object",
+      "properties": {
+        "clientName": { "type": "string", "description": "Full name of the client" },
+        "cpf": { "type": "string", "description": "CPF of the client" },
+        "phone": { "type": "string", "description": "Phone number of the client" },
+        "cnpj": { "type": "string", "description": "Optional CNPJ" },
+        "selections": { "type": "object", "description": "Selected items and their quantities" },
+        "totalValue": { "type": "number", "description": "Final calculated total" },
+        "discountType": { "type": "string", "enum": ["none", "NUMER", "SINDSEP"], "description": "Applied discount" },
+        "status": { "type": "string", "enum": ["pending", "approved"], "description": "Payment status" },
+        "proofUrl": { "type": "string", "description": "URL to the proof of payment" },
+        "createdBy": { "type": "string", "description": "UID of the user who created the budget" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["clientName", "cpf", "phone", "totalValue", "status", "createdBy"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "User profile documents"
+    },
+    "/budgets/{budgetId}": {
+      "schema": "budget",
+      "description": "Budget records"
+    }
+  }
+}
