@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { auth, db } from "../firebase";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { doc, getDoc, collection, getDocs, limit, query } from "firebase/firestore";
-import { Calculator, Lock, Mail, UserPlus } from "lucide-react";
+import { Calculator, Lock, Mail, UserPlus, LogIn } from "lucide-react";
+import logo from "../assets/logo.png";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -19,15 +20,25 @@ export default function Login() {
         const snap = await getDocs(q);
         setHasUsers(!snap.empty);
       } catch (e) {
-        // Se der erro de permissão, é porque o banco está protegido.
-        // Se não houver usuários, o Firebase costuma permitir a verificação inicial 
-        // ou falhar se a regra for muito restrita. 
-        // Vamos assumir que se falhou e não estamos logados, permitimos a tentativa de primeiro acesso.
         setHasUsers(false); 
       }
     };
     checkUsers();
   }, []);
+
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err: any) {
+      setError("Erro no login com Google: " + err.message);
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,16 +46,15 @@ export default function Login() {
     setError("");
     try {
       if (isRegistering) {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        // O App.tsx cuidará de criar o documento no Firestore após o login
+        await createUserWithEmailAndPassword(auth, email, password);
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
     } catch (err: any) {
       if (err.code === "auth/operation-not-allowed") {
         setError("O login por E-mail/Senha não está ativado no Console do Firebase. Ative-o em Authentication > Sign-in method.");
-      } else if (err.code === "auth/user-not-found") {
-        setError("Usuário não encontrado. Se este é o primeiro acesso, use a opção de cadastro.");
+      } else if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
+        setError("Email ou senha incorretos. Verifique suas credenciais ou use o login com Google.");
       } else if (err.code === "auth/wrong-password") {
         setError("Senha incorreta.");
       } else if (err.code === "auth/email-already-in-use") {
@@ -65,7 +75,7 @@ export default function Login() {
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
           <img 
-            src="/logo.png" 
+            src={logo} 
             alt="Numer Contabilidade e Sistemas" 
             className="w-24 h-24 object-contain drop-shadow-xl"
             onError={(e) => {
@@ -77,8 +87,8 @@ export default function Login() {
             <Calculator className="text-white w-12 h-12" />
           </div>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Numer<span className="text-orange-500">Contabilidade</span>
+        <h2 className="mt-6 text-center text-3xl font-extrabold text-orange-500">
+          Numer<span className="text-gray-900"> Contabilidade e Sistemas</span>
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
           {isRegistering ? "Crie sua conta de administrador" : "Acesse o sistema administrativo"}
@@ -152,6 +162,30 @@ export default function Login() {
               </button>
             </div>
           </form>
+
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">
+                  Ou continue com
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <button
+                onClick={handleGoogleLogin}
+                disabled={loading}
+                className="w-full flex justify-center items-center gap-3 py-3 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all disabled:opacity-50"
+              >
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
+                Entrar com Google
+              </button>
+            </div>
+          </div>
 
           <div className="mt-6">
             <div className="relative">

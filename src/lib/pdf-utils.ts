@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { SECTIONS, BASE_VALUE } from "../constants";
+import logo from "../assets/logo.png";
 
 interface Client {
   clientName: string;
@@ -27,7 +28,14 @@ export const getBase64Image = (url: string): Promise<string> => {
   });
 };
 
-export const generatePDF = async (client: Client, selections: Record<string, number>, discountType: string) => {
+export const generatePDF = async (
+  client: Client, 
+  selections: Record<string, number>, 
+  discountType: string,
+  baseValue: number = BASE_VALUE,
+  itemPrices: Record<string, number> = {},
+  discounts: { id: string; name: string; value: number }[] = []
+) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -41,7 +49,7 @@ export const generatePDF = async (client: Client, selections: Record<string, num
   // Pre-load logo
   let logoBase64 = "";
   try {
-    logoBase64 = await getBase64Image("/logo.png");
+    logoBase64 = await getBase64Image(logo);
   } catch (e) {
     console.warn("Could not load logo for PDF", e);
   }
@@ -119,20 +127,41 @@ export const generatePDF = async (client: Client, selections: Record<string, num
   // 3. Detalhamento Table
   const tableData: any[] = [
     ["DESCRIÇÃO DO ITEM", "QTD", "VALOR UNIT.", "SUBTOTAL"],
-    ["Honorários Base - Declaração IRPF 2026", "01", `R$ ${BASE_VALUE.toFixed(2)}`, `R$ ${BASE_VALUE.toFixed(2)}`],
+    ["Honorários Base - Declaração IRPF 2026", "01", `R$ ${baseValue.toFixed(2)}`, `R$ ${baseValue.toFixed(2)}`],
   ];
 
-  let subtotal = BASE_VALUE;
+  let subtotal = baseValue;
+  
+  // Find item 01 to ensure it always appears
+  const item01 = SECTIONS[0].items.find(i => i.id === "01")!;
+  const qty01 = selections["01"] || 0;
+  
+  // Add item 01 to tableData (always present)
+  const displayQty01 = Math.max(1, qty01);
+  const itemPrice01 = itemPrices["01"] ?? item01.price;
+  const itemTotal01 = Math.max(0, qty01 - 1) * itemPrice01;
+  subtotal += itemTotal01;
+  tableData.push([
+    item01.label,
+    displayQty01.toString().padStart(2, '0'),
+    `R$ ${itemPrice01.toFixed(2)}`,
+    `R$ ${itemTotal01.toFixed(2)}`,
+  ]);
+
   SECTIONS.forEach((section) => {
     section.items.forEach((item) => {
+      // Skip item 01 as we already added it
+      if (item.id === "01") return;
+
       const qty = selections[item.id] || 0;
       if (qty > 0) {
-        subtotal += qty * item.price;
+        const itemPrice = itemPrices[item.id] ?? item.price;
+        subtotal += qty * itemPrice;
         tableData.push([
           item.label,
           qty.toString().padStart(2, '0'),
-          `R$ ${item.price.toFixed(2)}`,
-          `R$ ${(qty * item.price).toFixed(2)}`,
+          `R$ ${itemPrice.toFixed(2)}`,
+          `R$ ${(qty * itemPrice).toFixed(2)}`,
         ]);
       }
     });
@@ -172,7 +201,9 @@ export const generatePDF = async (client: Client, selections: Record<string, num
   let finalY = (doc as any).lastAutoTable.finalY + 10;
 
   // 4. Totals Summary
-  const discount = discountType !== "none" ? subtotal * 0.1 : 0;
+  const selectedDiscount = discounts.find(d => d.id === discountType);
+  const discountValue = selectedDiscount ? selectedDiscount.value : (discountType !== "none" ? 10 : 0);
+  const discount = subtotal * (discountValue / 100);
   const total = subtotal - discount;
 
   const summaryX = pageWidth - 110; // Moved slightly more to the left to avoid overlap
@@ -185,7 +216,8 @@ export const generatePDF = async (client: Client, selections: Record<string, num
   if (discountType !== "none") {
     finalY += 6;
     doc.setTextColor(34, 197, 94);
-    doc.text(`Desconto (${discountType}):`, summaryX, finalY);
+    const discountName = selectedDiscount ? selectedDiscount.name : discountType;
+    doc.text(`Desconto (${discountName}):`, summaryX, finalY);
     doc.text(`- R$ ${discount.toFixed(2)}`, pageWidth - 20, finalY, { align: "right" });
   }
 

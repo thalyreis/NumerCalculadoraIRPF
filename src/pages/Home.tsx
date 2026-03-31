@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { db, auth } from "../firebase";
-import { collection, addDoc, serverTimestamp, doc, updateDoc } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, doc, updateDoc, onSnapshot } from "firebase/firestore";
 import { 
   Plus, Minus, Save, FileText, CheckCircle2, AlertCircle, Calculator, X, 
   Building2, User, Globe, Briefcase, ShieldCheck, Star, Receipt, 
@@ -11,19 +11,42 @@ import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../lib/utils";
 import { SECTIONS, BASE_VALUE } from "../constants";
 import { generatePDF } from "../lib/pdf-utils";
+import logo from "../assets/logo.png";
 
-export default function Home() {
+export default function Home({ isAdmin }: { isAdmin: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [client, setClient] = useState({ clientName: "", cpf: "", phone: "", cnpj: "" });
   const [selections, setSelections] = useState<Record<string, number>>({});
-  const [discountType, setDiscountType] = useState<"none" | "NUMER" | "SINDSEP">("none");
+  const [discountType, setDiscountType] = useState<string>("none");
+  const [pricing, setPricing] = useState({ 
+    baseValue: BASE_VALUE, 
+    itemPrices: {} as Record<string, number>,
+    discounts: [] as { id: string; name: string; value: number }[]
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, "settings", "pricing"), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setPricing({
+          baseValue: data.baseValue ?? BASE_VALUE,
+          itemPrices: data.itemPrices ?? {},
+          discounts: data.discounts ?? [
+            { id: "NUMER", name: "NUMER", value: 10 },
+            { id: "SINDSEP", name: "SINDSEP", value: 10 },
+          ],
+        });
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (location.state?.budget) {
@@ -51,24 +74,31 @@ export default function Home() {
   };
 
   const totals = useMemo(() => {
-    let subtotal = BASE_VALUE;
+    let subtotal = pricing.baseValue;
     let itemsCount = 0;
 
     SECTIONS.forEach((section) => {
       section.items.forEach((item) => {
         const qty = selections[item.id] || 0;
+        const itemPrice = pricing.itemPrices[item.id] ?? item.price;
         if (qty > 0) {
-          subtotal += qty * item.price;
+          if (item.id === "01") {
+            // First unit is free, starts charging from the 2nd
+            subtotal += Math.max(0, qty - 1) * itemPrice;
+          } else {
+            subtotal += qty * itemPrice;
+          }
           itemsCount += qty;
         }
       });
     });
 
-    const discount = discountType !== "none" ? subtotal * 0.1 : 0;
+    const selectedDiscount = pricing.discounts.find(d => d.id === discountType);
+    const discount = selectedDiscount ? subtotal * (selectedDiscount.value / 100) : 0;
     const total = subtotal - discount;
 
     return { subtotal, discount, total, itemsCount };
-  }, [selections, discountType]);
+  }, [selections, discountType, pricing]);
 
   const handleSave = async () => {
     if (!client.clientName || !client.cpf || !client.phone) {
@@ -99,9 +129,14 @@ export default function Home() {
         discountType,
         totalValue: totals.total,
         status,
-        createdBy: auth.currentUser?.uid,
         updatedAt: serverTimestamp(),
       };
+
+      if (!editingId) {
+        budgetData.createdBy = auth.currentUser?.uid;
+        budgetData.createdByEmail = auth.currentUser?.email;
+        budgetData.createdAt = serverTimestamp();
+      }
 
       if (proofUrl) {
         budgetData.proofUrl = proofUrl;
@@ -124,7 +159,7 @@ export default function Home() {
       }
 
       // 2. Generate PDF
-      await generatePDF(client, selections, discountType);
+      await generatePDF(client, selections, discountType, pricing.baseValue, pricing.itemPrices, pricing.discounts);
 
       setSuccess(true);
       
@@ -221,7 +256,16 @@ export default function Home() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-gray-800">{item.label}</p>
-                        <p className="text-xs text-orange-500 font-medium mt-1">{item.info}</p>
+                        <p className="text-xs text-orange-500 font-medium mt-1">
+                          {(() => {
+                            const currentPrice = pricing.itemPrices[item.id] ?? item.price;
+                            const formattedPrice = `R$ ${currentPrice.toFixed(2).replace('.', ',')}`;
+                            if (item.id === "01") {
+                              return `${item.info.replace(/R\$ [\d,.]+/, formattedPrice)} (a partir da 2ª unidade)`;
+                            }
+                            return item.info.replace(/R\$ [\d,.]+/, formattedPrice);
+                          })()}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 bg-gray-50 p-1 rounded-lg border border-gray-100">
@@ -252,7 +296,7 @@ export default function Home() {
           <div className="bg-white p-8 rounded-2xl shadow-xl border-2 border-orange-100 sticky top-24">
             <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
               <img 
-                src="/logo.png" 
+                src={logo} 
                 alt="Logo" 
                 className="w-10 h-10 object-contain"
                 onError={(e) => {
@@ -264,17 +308,45 @@ export default function Home() {
               Apuração de Valores
             </h3>
 
-            <div className="space-y-4 mb-8">
-              <div className="flex justify-between text-gray-600">
+            <div className="space-y-3 mb-8 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+              <div className="flex justify-between text-gray-600 text-sm">
                 <span>Taxa Base Fixa</span>
-                <span className="font-semibold">R$ {BASE_VALUE.toFixed(2)}</span>
+                <span className="font-semibold">R$ {pricing.baseValue.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-gray-600">
-                <span>Itens Adicionados ({totals.itemsCount})</span>
-                <span className="font-semibold">R$ {(totals.subtotal - BASE_VALUE).toFixed(2)}</span>
-              </div>
+              
+              {/* Item 01 - Always visible as requested previously */}
+              {(() => {
+                const item01 = SECTIONS[0].items.find(i => i.id === "01")!;
+                const qty = selections["01"] || 0;
+                const displayQty = Math.max(1, qty);
+                const itemPrice = pricing.itemPrices["01"] ?? item01.price;
+                const itemTotal = Math.max(0, qty - 1) * itemPrice;
+                return (
+                  <div key="item-01" className="flex justify-between text-gray-500 text-xs pl-2 border-l-2 border-blue-100">
+                    <span className="flex-1 mr-2">{item01.label} ({displayQty.toString().padStart(2, '0')})</span>
+                    <span className="font-medium">R$ {itemTotal.toFixed(2)}</span>
+                  </div>
+                );
+              })()}
+
+              {/* Other selected items */}
+              {SECTIONS.map(section => 
+                section.items.map(item => {
+                  if (item.id === "01") return null;
+                  const qty = selections[item.id] || 0;
+                  if (qty === 0) return null;
+                  const itemPrice = pricing.itemPrices[item.id] ?? item.price;
+                  return (
+                    <div key={item.id} className="flex justify-between text-gray-500 text-xs pl-2 border-l-2 border-orange-100">
+                      <span className="flex-1 mr-2">{item.label} ({qty.toString().padStart(2, '0')})</span>
+                      <span className="font-medium">R$ {(qty * itemPrice).toFixed(2)}</span>
+                    </div>
+                  );
+                })
+              )}
+
               <div className="h-px bg-gray-100 my-4"></div>
-              <div className="flex justify-between text-lg font-bold text-gray-900">
+              <div className="flex justify-between text-lg font-bold text-gray-900 pt-2">
                 <span>Subtotal</span>
                 <span>R$ {totals.subtotal.toFixed(2)}</span>
               </div>
@@ -283,28 +355,20 @@ export default function Home() {
             <div className="space-y-3 mb-8">
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Descontos Disponíveis</p>
               <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => setDiscountType(discountType === "NUMER" ? "none" : "NUMER")}
-                  className={cn(
-                    "px-4 py-3 rounded-xl border-2 text-sm font-bold transition-all",
-                    discountType === "NUMER"
-                      ? "bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-200"
-                      : "bg-white border-gray-100 text-gray-600 hover:border-orange-200"
-                  )}
-                >
-                  NUMER (10%)
-                </button>
-                <button
-                  onClick={() => setDiscountType(discountType === "SINDSEP" ? "none" : "SINDSEP")}
-                  className={cn(
-                    "px-4 py-3 rounded-xl border-2 text-sm font-bold transition-all",
-                    discountType === "SINDSEP"
-                      ? "bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-200"
-                      : "bg-white border-gray-100 text-gray-600 hover:border-orange-200"
-                  )}
-                >
-                  SINDSEP (10%)
-                </button>
+                {pricing.discounts.map((discount) => (
+                  <button
+                    key={discount.id}
+                    onClick={() => setDiscountType(discountType === discount.id ? "none" : discount.id)}
+                    className={cn(
+                      "px-4 py-3 rounded-xl border-2 text-sm font-bold transition-all",
+                      discountType === discount.id
+                        ? "bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-200"
+                        : "bg-white border-gray-100 text-gray-600 hover:border-orange-200"
+                    )}
+                  >
+                    {discount.name} ({discount.value}%)
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -355,7 +419,7 @@ export default function Home() {
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-3">
                 <button
-                  onClick={() => generatePDF(client, selections, discountType)}
+                  onClick={() => generatePDF(client, selections, discountType, pricing.baseValue, pricing.itemPrices, pricing.discounts)}
                   className="flex items-center justify-center gap-2 bg-white border-2 border-orange-500 text-orange-500 py-4 px-6 rounded-xl font-bold hover:bg-orange-50 transition-all"
                 >
                   <FileText className="w-5 h-5" />

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { db, auth } from "../firebase";
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, deleteDoc } from "firebase/firestore";
-import { FileUp, Trash2, CheckCircle2, Clock, Search, ExternalLink, AlertCircle, Edit2, X, FileText } from "lucide-react";
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, deleteDoc, getDoc } from "firebase/firestore";
+import { FileUp, Trash2, CheckCircle2, Clock, Search, ExternalLink, AlertCircle, Edit2, X, FileText, User as UserIcon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../lib/utils";
 import { generatePDF } from "../lib/pdf-utils";
+import { BASE_VALUE } from "../constants";
 
 interface Budget {
   id: string;
@@ -19,13 +20,19 @@ interface Budget {
   status: "pending" | "approved";
   proofUrl?: string;
   createdAt: any;
+  createdByEmail?: string;
 }
 
-export default function Budgets() {
+export default function Budgets({ isAdmin }: { isAdmin?: boolean }) {
   const navigate = useNavigate();
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [pricing, setPricing] = useState({ 
+    baseValue: BASE_VALUE, 
+    itemPrices: {} as Record<string, number>,
+    discounts: [] as { id: string; name: string; value: number }[]
+  });
   
   // Modal States
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -36,13 +43,30 @@ export default function Budgets() {
   useEffect(() => {
     if (!auth.currentUser) return;
 
-    const q = query(
-      collection(db, "budgets"),
-      where("createdBy", "==", auth.currentUser.uid),
-      orderBy("createdAt", "desc")
-    );
+    // Fetch pricing settings
+    const pricingUnsubscribe = onSnapshot(doc(db, "settings", "pricing"), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setPricing({
+          baseValue: data.baseValue ?? BASE_VALUE,
+          itemPrices: data.itemPrices ?? {},
+          discounts: data.discounts ?? [
+            { id: "NUMER", name: "NUMER", value: 10 },
+            { id: "SINDSEP", name: "SINDSEP", value: 10 },
+          ],
+        });
+      }
+    });
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const budgetsQuery = isAdmin 
+      ? query(collection(db, "budgets"), orderBy("createdAt", "desc"))
+      : query(
+          collection(db, "budgets"),
+          where("createdBy", "==", auth.currentUser.uid),
+          orderBy("createdAt", "desc")
+        );
+
+    const budgetsUnsubscribe = onSnapshot(budgetsQuery, (snapshot) => {
       const docs = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -51,8 +75,11 @@ export default function Budgets() {
       setLoading(false);
     });
 
-    return () => unsubscribe();
-  }, []);
+    return () => {
+      pricingUnsubscribe();
+      budgetsUnsubscribe();
+    };
+  }, [isAdmin]);
 
   const openInNewTab = (dataUrl: string) => {
     try {
@@ -124,7 +151,8 @@ export default function Budgets() {
 
   const filteredBudgets = budgets.filter((b) =>
     b.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    b.cpf.includes(searchTerm)
+    b.cpf.includes(searchTerm) ||
+    (b.createdByEmail && b.createdByEmail.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   if (loading) {
@@ -183,6 +211,11 @@ export default function Budgets() {
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-500">
+                    {isAdmin && budget.createdByEmail && (
+                      <span className="flex items-center gap-1 text-orange-600 font-medium">
+                        <UserIcon className="w-3 h-3" /> {budget.createdByEmail}
+                      </span>
+                    )}
                     <span className="flex items-center gap-1">
                       <span className="font-semibold text-gray-400">CPF:</span> {budget.cpf}
                     </span>
@@ -211,7 +244,10 @@ export default function Budgets() {
                       onClick={() => generatePDF(
                         { clientName: budget.clientName, cpf: budget.cpf, phone: budget.phone, cnpj: budget.cnpj },
                         budget.selections,
-                        budget.discountType
+                        budget.discountType,
+                        pricing.baseValue,
+                        pricing.itemPrices,
+                        pricing.discounts
                       )}
                       className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                       title="Visualizar Orçamento (PDF)"

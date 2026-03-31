@@ -7,6 +7,7 @@ import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Budgets from "./pages/Budgets";
 import Users from "./pages/Users";
+import Settings from "./pages/Settings";
 import Layout from "./components/Layout";
 
 export default function App() {
@@ -57,15 +58,19 @@ export default function App() {
         <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
         <Route
           path="/"
-          element={user ? <Layout isAdmin={isAdmin}><Home /></Layout> : <Navigate to="/login" />}
+          element={user ? <Layout isAdmin={isAdmin}><Home isAdmin={isAdmin} /></Layout> : <Navigate to="/login" />}
         />
         <Route
           path="/budgets"
-          element={user ? <Layout isAdmin={isAdmin}><Budgets /></Layout> : <Navigate to="/login" />}
+          element={user ? <Layout isAdmin={isAdmin}><Budgets isAdmin={isAdmin} /></Layout> : <Navigate to="/login" />}
         />
         <Route
           path="/users"
           element={user && isAdmin ? <Layout isAdmin={isAdmin}><Users /></Layout> : <Navigate to="/" />}
+        />
+        <Route
+          path="/settings"
+          element={user && isAdmin ? <Layout isAdmin={isAdmin}><Settings /></Layout> : <Navigate to="/" />}
         />
       </Routes>
     </Router>

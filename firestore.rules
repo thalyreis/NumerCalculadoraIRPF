@@ -48,7 +48,7 @@ service cloud.firestore {
     }
 
     function isValidBudget(data) {
-      return data.keys().hasAll(['clientName', 'cpf', 'phone', 'totalValue', 'status', 'createdBy', 'createdAt', 'selections', 'discountType']) &&
+      return data.keys().hasAll(['clientName', 'cpf', 'phone', 'totalValue', 'status', 'selections', 'discountType']) &&
              data.clientName is string && data.clientName.size() > 0 && data.clientName.size() <= 100 &&
              data.cpf is string && data.cpf.size() >= 11 &&
              data.phone is string && data.phone.size() >= 8 &&
@@ -56,8 +56,9 @@ service cloud.firestore {
              data.status in ['pending', 'approved'] &&
              data.discountType in ['none', 'NUMER', 'SINDSEP'] &&
              data.selections is map &&
-             data.createdBy == request.auth.uid &&
-             (!('updatedAt' in data) || data.updatedAt is timestamp);
+             (!('createdBy' in data) || data.createdBy == request.auth.uid || isAdmin()) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp) &&
+             (!('createdAt' in data) || data.createdAt is timestamp);
     }
 
     match /users/{userId} {
@@ -73,6 +74,11 @@ service cloud.firestore {
       allow update: if isAuthenticated() && (resource.data.createdBy == request.auth.uid || isAdmin()) &&
                     isValidBudget(request.resource.data);
       allow delete: if isAuthenticated() && (resource.data.createdBy == request.auth.uid || isAdmin());
+    }
+
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
   }
 }
