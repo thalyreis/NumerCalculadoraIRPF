@@ -1,7 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { SECTIONS, BASE_VALUE } from "../constants";
-import logo from "../assets/logo.png";
 
 interface Client {
   clientName: string;
@@ -49,7 +48,7 @@ export const generatePDF = async (
   // Pre-load logo
   let logoBase64 = "";
   try {
-    logoBase64 = await getBase64Image(logo);
+    logoBase64 = await getBase64Image("/logo.png");
   } catch (e) {
     console.warn("Could not load logo for PDF", e);
   }

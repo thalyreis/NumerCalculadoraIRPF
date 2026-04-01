@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { auth, db } from "../firebase";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { doc, getDoc, collection, getDocs, limit, query, where } from "firebase/firestore";
 import { Calculator, Lock, Mail, UserPlus, LogIn } from "lucide-react";
-import logo from "../assets/logo.png";
+import { cn } from "../lib/utils";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -74,7 +74,7 @@ export default function Login() {
         errorCode === "auth/invalid-login-credentials" ||
         errorMessage.includes("auth/invalid-credential")
       ) {
-        setError("Credenciais inválidas. Verifique se o e-mail e a senha estão corretos. Se você usa o Google para entrar, use o botão abaixo.");
+        setError("Credenciais inválidas. Verifique se o e-mail e a senha estão corretos.");
       } else if (errorCode === "auth/wrong-password") {
         setError("Senha incorreta.");
       } else if (errorCode === "auth/too-many-requests") {
@@ -92,7 +92,7 @@ export default function Login() {
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
           <img 
-            src={logo} 
+            src="/logo.png" 
             alt="Numer Contabilidade e Sistemas" 
             className="w-24 h-24 object-contain drop-shadow-xl"
             onError={(e) => {

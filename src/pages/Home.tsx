@@ -13,7 +13,6 @@ import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 
 import { cn } from "../lib/utils";
 import { SECTIONS, BASE_VALUE } from "../constants";
 import { generatePDF } from "../lib/pdf-utils";
-import logo from "../assets/logo.png";
 
 export default function Home({ isAdmin }: { isAdmin: boolean }) {
   const location = useLocation();
@@ -341,7 +340,7 @@ export default function Home({ isAdmin }: { isAdmin: boolean }) {
           <div className="bg-white p-8 rounded-2xl shadow-xl border-2 border-orange-100 sticky top-24">
             <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
               <img 
-                src={logo} 
+                src="/logo.png" 
                 alt="Logo" 
                 className="w-10 h-10 object-contain"
                 onError={(e) => {
