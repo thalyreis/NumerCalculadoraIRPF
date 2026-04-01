@@ -63,9 +63,10 @@ export default function Home({ isAdmin }: { isAdmin: boolean }) {
       setTimeout(() => setShowPassModal(false), 2000);
     } catch (err: any) {
       console.error(err);
-      if (err.code === "auth/wrong-password") {
+      const errorCode = err.code || "";
+      if (errorCode === "auth/wrong-password" || errorCode === "auth/invalid-credential") {
         setPassError("A senha atual está incorreta.");
-      } else if (err.code === "auth/weak-password") {
+      } else if (errorCode === "auth/weak-password") {
         setPassError("A nova senha deve ter pelo menos 6 caracteres.");
       } else {
         setPassError("Erro ao alterar senha: " + err.message);

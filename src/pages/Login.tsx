@@ -10,6 +10,27 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError("Por favor, digite seu e-mail para redefinir a senha.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const { sendPasswordResetEmail } = await import("firebase/auth");
+      await sendPasswordResetEmail(auth, email);
+      setResetSent(true);
+      setError("");
+    } catch (err: any) {
+      console.error("Reset error:", err);
+      setError("Erro ao enviar e-mail de redefinição: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -36,16 +57,26 @@ export default function Login() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (err: any) {
-      if (err.code === "auth/operation-not-allowed") {
+      console.error("Login error details:", err);
+      const errorCode = err.code || "";
+      const errorMessage = err.message || "";
+
+      if (errorCode === "auth/operation-not-allowed") {
         setError("O login por E-mail/Senha não está ativado no Console do Firebase. Ative-o em Authentication > Sign-in method.");
-      } else if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
-        setError("Credenciais inválidas. Verifique seu e-mail e senha.");
-      } else if (err.code === "auth/wrong-password") {
+      } else if (
+        errorCode === "auth/user-not-found" || 
+        errorCode === "auth/invalid-credential" || 
+        errorCode === "auth/invalid-login-credentials" ||
+        errorMessage.includes("auth/invalid-credential")
+      ) {
+        setError("Credenciais inválidas. Verifique se o e-mail e a senha estão corretos. Se você usa o Google para entrar, use o botão abaixo.");
+      } else if (errorCode === "auth/wrong-password") {
         setError("Senha incorreta.");
+      } else if (errorCode === "auth/too-many-requests") {
+        setError("Muitas tentativas malsucedidas. Sua conta foi temporariamente bloqueada. Tente novamente mais tarde.");
       } else {
-        setError("Erro na autenticação: " + err.message);
+        setError("Erro na autenticação: " + (errorCode || errorMessage || "Erro desconhecido"));
       }
-      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -124,8 +155,23 @@ export default function Login() {
             </div>
 
             {error && (
-              <div className="bg-red-50 border-l-4 border-red-400 p-4 text-red-700 text-sm">
-                {error}
+              <div className="bg-red-50 border-l-4 border-red-400 p-4 text-red-700 text-sm flex flex-col gap-2">
+                <p>{error}</p>
+                {(error.includes("Credenciais inválidas") || error.includes("Senha incorreta")) && (
+                  <button 
+                    type="button"
+                    onClick={handleForgotPassword}
+                    className="text-orange-600 font-bold hover:underline text-left"
+                  >
+                    Esqueceu sua senha? Clique aqui para redefinir.
+                  </button>
+                )}
+              </div>
+            )}
+
+            {resetSent && (
+              <div className="bg-green-50 border-l-4 border-green-400 p-4 text-green-700 text-sm">
+                E-mail de redefinição enviado! Verifique sua caixa de entrada.
               </div>
             )}
 
