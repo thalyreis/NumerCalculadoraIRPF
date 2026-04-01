@@ -14,11 +14,12 @@ export default function Login() {
 
   const handleForgotPassword = async () => {
     if (!email) {
-      setError("Por favor, digite seu e-mail para redefinir a senha.");
+      setError("Por favor, digite seu e-mail no campo acima para redefinir a senha.");
       return;
     }
     setLoading(true);
     setError("");
+    setResetSent(false);
     try {
       const { sendPasswordResetEmail } = await import("firebase/auth");
       await sendPasswordResetEmail(auth, email);
@@ -26,7 +27,11 @@ export default function Login() {
       setError("");
     } catch (err: any) {
       console.error("Reset error:", err);
-      setError("Erro ao enviar e-mail de redefinição: " + err.message);
+      if (err.code === "auth/user-not-found") {
+        setError("Este e-mail não foi encontrado em nossa base de autenticação.");
+      } else {
+        setError("Erro ao enviar e-mail de redefinição: " + err.message);
+      }
     } finally {
       setLoading(false);
     }
